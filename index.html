@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Supabase Live & Flyovers Test</title>
+  <!-- Load the Supabase JavaScript client from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }
+    .card { background: #f9f9f9; border: 1px solid #ddd; padding: 20px; margin-bottom: 20px; border-radius: 6px; }
+    pre { background: #eee; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    .error { color: #b00020; }
+  </style>
+</head>
+<body>
+  <h1>Supabase Data Viewer</h1>
+
+  <div class="card">
+    <h2>Live Snapshot</h2>
+    <div id="snapshot-output">Loading snapshot...</div>
+  </div>
+
+  <div class="card">
+    <h2>Recent Flyovers</h2>
+    <div id="flyovers-output">Loading flyovers...</div>
+  </div>
+
+  <script>
+    function showError(element, message) {
+      const paragraph = document.createElement("p");
+      paragraph.className = "error";
+      paragraph.textContent = `Error: ${message}`;
+      element.replaceChildren(paragraph);
+    }
+
+    function showJson(element, label, updatedAt, value, count) {
+      const fragment = document.createDocumentFragment();
+      const updated = document.createElement("p");
+      updated.textContent = `Last Updated: ${updatedAt ?? "Unavailable"}`;
+      fragment.append(updated);
+
+      if (count !== undefined) {
+        const countElement = document.createElement("p");
+        countElement.textContent = `Aircraft Count: ${count}`;
+        fragment.append(countElement);
+      }
+
+      const output = document.createElement("pre");
+      output.setAttribute("aria-label", label);
+      output.textContent = JSON.stringify(value, null, 2);
+      fragment.append(output);
+      element.replaceChildren(fragment);
+    }
+
+    async function fetchData() {
+      const snapshotDiv = document.getElementById("snapshot-output");
+      const flyoversDiv = document.getElementById("flyovers-output");
+
+      try {
+        const configResponse = await fetch("/api/config", { cache: "no-store" });
+        const config = await configResponse.json();
+        if (!configResponse.ok) {
+          throw new Error(config.error || `Configuration request failed (${configResponse.status})`);
+        }
+
+        const supabaseClient = supabase.createClient(config.url, config.anonKey);
+        const [snapshotResult, flyoversResult] = await Promise.all([
+          supabaseClient
+            .from("live_snapshot")
+            .select("payload, updated_at")
+            .eq("id", "current")
+            .single(),
+          supabaseClient
+            .from("recent_flyovers")
+            .select("flyovers, updated_at")
+            .eq("id", "current")
+            .single()
+        ]);
+
+        if (snapshotResult.error) {
+          showError(snapshotDiv, snapshotResult.error.message);
+        } else {
+          showJson(
+            snapshotDiv,
+            "Aircraft data",
+            snapshotResult.data.updated_at,
+            snapshotResult.data.payload?.aircraft ?? null,
+            snapshotResult.data.payload?.count ?? "Unavailable"
+          );
+        }
+
+        if (flyoversResult.error) {
+          showError(flyoversDiv, flyoversResult.error.message);
+        } else {
+          showJson(
+            flyoversDiv,
+            "Recent flyovers",
+            flyoversResult.data.updated_at,
+            flyoversResult.data.flyovers
+          );
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unexpected error";
+        showError(snapshotDiv, message);
+        showError(flyoversDiv, message);
+      }
+    }
+
+    fetchData();
+  </script>
+</body>
+</html>

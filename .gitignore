@@ -1,0 +1,4 @@
+.vercel/
+secrets.txt
+.env
+.env.*
