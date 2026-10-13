@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Supabase Live & Flyovers Test</title>
+  <title>Supabase Runway, Flyovers & Live Status</title>
   <!-- Load the Supabase JavaScript client from CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -16,13 +16,18 @@
   <h1>Supabase Data Viewer</h1>
 
   <div class="card">
-    <h2>Live Snapshot</h2>
-    <div id="snapshot-output">Loading snapshot...</div>
+    <h2>Runway Observations</h2>
+    <div id="runway-observations-output">Loading runway observations...</div>
   </div>
 
   <div class="card">
     <h2>Recent Flyovers</h2>
     <div id="flyovers-output">Loading flyovers...</div>
+  </div>
+
+  <div class="card">
+    <h2>Live Status</h2>
+    <div id="live-status-output">Loading live status...</div>
   </div>
 
   <script>
@@ -35,9 +40,11 @@
 
     function showJson(element, label, updatedAt, value, count) {
       const fragment = document.createDocumentFragment();
-      const updated = document.createElement("p");
-      updated.textContent = `Last Updated: ${updatedAt ?? "Unavailable"}`;
-      fragment.append(updated);
+      if (updatedAt !== undefined) {
+        const updated = document.createElement("p");
+        updated.textContent = `Last Updated: ${updatedAt ?? "Unavailable"}`;
+        fragment.append(updated);
+      }
 
       if (count !== undefined) {
         const countElement = document.createElement("p");
@@ -53,8 +60,9 @@
     }
 
     async function fetchData() {
-      const snapshotDiv = document.getElementById("snapshot-output");
+      const runwayObservationsDiv = document.getElementById("runway-observations-output");
       const flyoversDiv = document.getElementById("flyovers-output");
+      const liveStatusDiv = document.getElementById("live-status-output");
 
       try {
         const configResponse = await fetch("/api/config", { cache: "no-store" });
@@ -64,24 +72,38 @@
         }
 
         const supabaseClient = supabase.createClient(config.url, config.anonKey);
-        const [snapshotResult, flyoversResult] = await Promise.all([
+        const [runwayObservationsResult, flyoversResult, snapshotResult] = await Promise.all([
           supabaseClient
-            .from("live_snapshot")
-            .select("payload, updated_at")
-            .eq("id", "current")
-            .single(),
+            .from("runway_observations")
+            .select("*"),
           supabaseClient
             .from("recent_flyovers")
             .select("flyovers, updated_at")
             .eq("id", "current")
+            .single(),
+          supabaseClient
+            .from("live_snapshot")
+            .select("payload, updated_at")
+            .eq("id", "current")
             .single()
         ]);
 
-        if (snapshotResult.error) {
-          showError(snapshotDiv, snapshotResult.error.message);
+        if (runwayObservationsResult.error) {
+          showError(runwayObservationsDiv, runwayObservationsResult.error.message);
         } else {
           showJson(
-            snapshotDiv,
+            runwayObservationsDiv,
+            "Runway observations",
+            undefined,
+            runwayObservationsResult.data
+          );
+        }
+
+        if (snapshotResult.error) {
+          showError(liveStatusDiv, snapshotResult.error.message);
+        } else {
+          showJson(
+            liveStatusDiv,
             "Aircraft data",
             snapshotResult.data.updated_at,
             snapshotResult.data.payload?.aircraft ?? null,
@@ -101,8 +123,9 @@
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unexpected error";
-        showError(snapshotDiv, message);
+        showError(runwayObservationsDiv, message);
         showError(flyoversDiv, message);
+        showError(liveStatusDiv, message);
       }
     }
 
